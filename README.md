@@ -34,4 +34,4 @@ Una vez descargado, copie HandBrakeCLI en su carpeta de Aplicaciones.
    python compress.py
    ```
 
-El script comprime un video utilizando HandBrakeCLI. Solicita la ruta del video a comprimir y la ruta donde se guardará el video comprimido. El video de salida será un archivo MP4 optimizado, con una tasa de compresión de más del 80%, una resolución de 1920px de ancho, una tasa de cuadros de 30 fps, y una tasa de bits de audio de 96 kbps.
+El script comprime un video utilizando HandBrakeCLI. Solicita la ruta del video a comprimir y la ruta donde se guardará el video comprimido. El video de salida será un archivo MP4 optimizado, con una tasa de compresión de más del 80%, una resolución de 1080p, una tasa de cuadros de 30 fps, y una tasa de bits de audio de 96 kbps.
