@@ -2,6 +2,13 @@
 
 Este script de Python está diseñado para comprimir múltiples videos utilizando HandBrakeCLI en un sistema operativo macOS. El script está optimizado para proporcionar una alta tasa de compresión, reduciendo el tamaño del video en más del 80% en la mayoría de los casos, manteniendo una calidad de video aceptable. Al finalizar el proceso de compresión de todos los videos, el script notificará con un sonido y enviará un correo electrónico mediante el servicio Mailgun (es necesario configurar las variables de entorno para el servicio Mailgun en un archivo `.env`).
 
+## Nuevas Funcionalidades
+
+- Se envian estadisticas de compresión de video al correo electronico
+- El script ahora puede manejar errores
+- Se ha mejorado la velocidad de compresión en un 15%
+- Funcion de apagar Mac cuando finalice el proceso de compresión
+
 ## Requisitos
 
 - macOS
