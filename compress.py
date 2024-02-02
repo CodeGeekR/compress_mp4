@@ -7,7 +7,6 @@ import time
 import getpass
 import glob
 
-
 # Variables globales para almacenar las estadísticas de compresión
 total_videos = 0
 total_compression_time = 0
@@ -109,20 +108,30 @@ def comprimir_video(ruta_origen, ruta_destino):
     
     # Mueve el archivo original a la papelera
     username = getpass.getuser()
-    trash_path = f'/Users/{username}/.Trash'
+    # Verifica si el script se está ejecutando con privilegios de root
+    if os.geteuid() == 0:
+        # Si es así, usa la ruta a la papelera del usuario root
+        trash_path = '/var/root/.Trash'
+    else:
+        # Si no, usa la ruta a la papelera del usuario actual
+        trash_path = f'/Users/{username}/.Trash'
+
     # Verifica si la ruta de origen es un directorio
     if os.path.isdir(ruta_origen):
-        # Si es un directorio, itera sobre todos los archivos en el directorio
-        for nombre_archivo in os.listdir(ruta_origen):
-            # Solo mover los archivos .mp4 a la papelera
-            if nombre_archivo.endswith('.mp4'):
-                ruta_archivo = os.path.join(ruta_origen, nombre_archivo)
-                comando = f'mv "{ruta_archivo}" "{trash_path}"'
-                subprocess.run(comando, shell=True)
+        # Si es un directorio, busca todos los archivos .mp4 en el directorio y sus subdirectorios
+        for ruta_archivo in glob.glob(ruta_origen + '/**/*.mp4', recursive=True):
+            comando = f'mv "{ruta_archivo}" "{trash_path}"'
+            try:
+                subprocess.run(comando, shell=True, check=True)
+            except subprocess.CalledProcessError:
+                print(f"Error al mover el archivo {ruta_archivo} a la papelera")
     else:
         # Si no es un directorio, asume que es un archivo y lo mueve a la papelera
         comando = f'mv "{ruta_origen}" "{trash_path}"'
-        subprocess.run(comando, shell=True)
+        try:
+            subprocess.run(comando, shell=True, check=True)
+        except subprocess.CalledProcessError:
+            print(f"Error al mover el archivo {ruta_origen} a la papelera")
 
 def alert_success():
     """
