@@ -161,3 +161,4 @@ cython_debug/
 # misc
 .DS_Store
 database_config.py
+HandBrakeCLI
