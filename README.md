@@ -8,6 +8,11 @@ Este script de Python está diseñado para comprimir múltiples videos utilizand
 - El script ahora puede manejar errores
 - Se ha mejorado la velocidad de compresión en un 15%
 - Funcion de apagar Mac cuando finalice el proceso de compresión
+- Al finalizar la compresión envia el archivo de origen a la papelera
+- Se lanza el primer release para Mac mostrando las estadisticas al final del proceso de compresión de video.
+
+![Estadisticas en e-mail](https://github.com/CodeGeekR/compress_mp4/blob/main/images/stadists_mail.jpg?raw=true)
+
 
 ## Requisitos
 
