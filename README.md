@@ -1,5 +1,8 @@
 # Script de Compresión de Video MP4
 
+[![Python](https://img.shields.io/badge/Python-yellow?style=for-the-badge&logo=python&logoColor=white&labelColor=101010)](https://www.python.org)
+
+
 Este script de Python está diseñado para comprimir múltiples videos utilizando HandBrakeCLI en un sistema operativo macOS. El script está optimizado para proporcionar una alta tasa de compresión, reduciendo el tamaño del video en más del 80% en la mayoría de los casos, manteniendo una calidad de video aceptable. Al finalizar el proceso de compresión de todos los videos, el script notificará con un sonido y enviará un correo electrónico mediante el servicio Mailgun (es necesario configurar las variables de entorno para el servicio Mailgun en un archivo `.env`).
 
 ## Nuevas Funcionalidades
