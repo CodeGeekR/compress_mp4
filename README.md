@@ -11,8 +11,9 @@ Este script de Python está diseñado para comprimir múltiples videos utilizand
 - Al finalizar la compresión envia el archivo de origen a la papelera
 - Se lanza el primer release para Mac mostrando las estadisticas al final del proceso de compresión de video.
 
-![Estadisticas en e-mail](https://github.com/CodeGeekR/compress_mp4/blob/main/images/stadists_mail.jpg?raw=true)
-
+<p align="center">
+  <img src="https://github.com/CodeGeekR/compress_mp4/blob/main/images/stadists_mail.jpg?raw=true" alt="Estadisticas en e-mail">
+</p>
 
 ## Requisitos
 
