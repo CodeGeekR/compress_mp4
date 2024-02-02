@@ -1,12 +1,8 @@
 import subprocess
 import os
 import sys
-from dotenv import load_dotenv
-import requests
 import time
-import getpass
-import glob
-
+import ctypes
 
 # Variables globales para almacenar las estadísticas de compresión
 total_videos = 0
@@ -25,7 +21,7 @@ def get_all_videos(directory):
     for root, dirs, files in os.walk(directory):
         for file in files:
             # Si el archivo es un video, añade su ruta a la lista
-            if file.endswith(('.mp4')):
+            if file.endswith(('.mp4', '.avi', '.mkv', '.flv', '.mov')):
                 videos.append(os.path.join(root, file))
 
     return videos
@@ -33,7 +29,7 @@ def get_all_videos(directory):
 
 def shutdown_option():
     """
-    Esta función pregunta al usuario si desea que el Mac se apague cuando finalice el proceso de compresión.
+    Esta función pregunta al usuario si desea que el PC se apague cuando finalice el proceso de compresión.
     """
     print("¡Gracias por usar Compress MP4, sus archivos se guardarán en el mismo directorio que los archivos de origen!")
 
@@ -44,12 +40,6 @@ def shutdown_option():
             break
         else:
             print("Por favor, ingrese 1 o 2.")
-
-    # Si el usuario eligió apagar el Mac, verifica si el script se está ejecutando con permisos de superusuario
-    if shutdown == '1':
-        if os.geteuid() != 0:
-            print("Para apagar el Mac debes ejecutar este script como superusuario. Intenta ejecutar el script con 'sudo'.")
-            sys.exit()
 
     # Pregunta al usuario si desea comprimir videos individuales o todos los videos en un directorio
     while True:
@@ -62,8 +52,7 @@ def shutdown_option():
     return shutdown, compression_option
 
 # Llama a la función de opción de apagado al inicio del script y guarda la elección del usuario
-shutdown, compression_option = shutdown_option()    
-
+shutdown, compression_option = shutdown_option()
 
 def comprimir_video(ruta_origen, ruta_destino):
     """
@@ -82,9 +71,17 @@ def comprimir_video(ruta_origen, ruta_destino):
     # Incrementa el total de videos
     total_videos += 1
 
-    # Reemplaza las barras invertidas en las rutas de los archivos
-    ruta_origen = ruta_origen.replace('\\', '')
-    ruta_destino = ruta_destino.replace('\\', '')
+    # Reemplaza las barras invertidas en las rutas de los archivos con barras normales
+    ruta_origen = ruta_origen.replace('\\', '/') 
+    ruta_destino = ruta_destino.replace('\\', '/')
+    
+    # Convierte la ruta en absoluta para que acepte espacios en el nombre del archivo o en la ruta del directorio que lo contiene
+    # ruta_origen = os.path.abspath(ruta_origen) 
+    # ruta_destino = os.path.abspath(ruta_destino)
+    
+    # Se agrega comillas dobles a la ruta si contiene espacios
+    # ruta_origen = shlex.quote(ruta_origen)
+    # ruta_destino = shlex.quote(ruta_destino)
     
     # Obtiene el tamaño del video antes de la compresión
     original_size = os.path.getsize(ruta_origen)
@@ -92,12 +89,18 @@ def comprimir_video(ruta_origen, ruta_destino):
 
     # Registra el tiempo de inicio de la compresión
     start_time = time.time()
+    
+    # En lugar de './HandBrakeCLI', usa la ruta completa al ejecutable HandBrakeCLI
+    handbrakecli_path = os.path.join(os.path.dirname(__file__), 'HandBrakeCLI')
 
     # Comando para comprimir el video
-    comando = ['/Applications/HandBrakeCLI', '-i', f'"{ruta_origen}"', '-o', f'"{ruta_destino}"', '-f', 'mp4', '--optimize', '-e', 'x264', '-q', '26', '-r', '30', '-E', 'ca_aac', '-B', '96', '-w', '1920']
+    comando = [handbrakecli_path, '-i', ruta_origen, '-o', ruta_destino, '-f', 'mp4', '--optimize', '-e', 'x264', '-q', '26', '-r', '30', '-E', 'ca_aac', '-B', '96', '-w', '1920']
 
     # Ejecuta el comando
-    subprocess.run(' '.join(comando), shell=True)
+    subprocess.run(comando, shell=False)
+    
+    # Espera un poco antes de obtener el tamaño del archivo de video comprimido
+    time.sleep(3)
     
     # Obtiene el tamaño del video después de la compresión
     compressed_size = os.path.getsize(ruta_destino)
@@ -108,21 +111,13 @@ def comprimir_video(ruta_origen, ruta_destino):
     total_compression_time += compression_time_seconds
     
     # Mueve el archivo original a la papelera
-    username = getpass.getuser()
-    trash_path = f'/Users/{username}/.Trash'
-    # Verifica si la ruta de origen es un directorio
-    if os.path.isdir(ruta_origen):
-        # Si es un directorio, itera sobre todos los archivos en el directorio
-        for nombre_archivo in os.listdir(ruta_origen):
-            # Solo mover los archivos .mp4 a la papelera
-            if nombre_archivo.endswith('.mp4'):
-                ruta_archivo = os.path.join(ruta_origen, nombre_archivo)
-                comando = f'mv "{ruta_archivo}" "{trash_path}"'
-                subprocess.run(comando, shell=True)
-    else:
-        # Si no es un directorio, asume que es un archivo y lo mueve a la papelera
-        comando = f'mv "{ruta_origen}" "{trash_path}"'
-        subprocess.run(comando, shell=True)
+    FOF_ALLOWUNDO = 0x40
+    FOF_NOCONFIRMATION = 0x10
+    ctypes.windll.shell32.SHFileOperationW(ctypes.pointer(ctypes.wintypes.SHFILEOPSTRUCTW(
+        wFunc=0x3,  # FO_DELETE
+        pFrom= ruta_origen + '\0',
+        fFlags=FOF_ALLOWUNDO | FOF_NOCONFIRMATION,
+    )))
 
 def alert_success():
     """
@@ -144,68 +139,32 @@ def alert_success():
     space_saved_gb = space_saved / (1024 ** 3)
     
     # Genera un sonido de alerta en caso de éxito
-    os.system('afplay ok-notification-alert.wav')
+    # os.system('afplay ok-notification-alert.wav')
     
-    # Prepara el mensaje del correo electrónico
-    email_message = (
+    # Muestra las estadísticas en la terminal
+    print(
         f"La compresión de sus videos se realizó satisfactoriamente. Aquí están las estadísticas de la compresión:\n\n"
         f"Cantidad de videos comprimidos: {total_videos}\n"
         f"Tiempo total de compresión: {int(compression_time_hours)} hr: {int(compression_time_minutes)} min\n"
         f"Porcentaje de compresión: {percent_space_saved:.2f}%\n"
-        f"Espacio ahorrado: {space_saved_gb:.2f} GB"
+        f"Espacio ganado: {space_saved_gb:.2f} GB"
     )
-
-    # Envía el correo electrónico
-    send_email("Compresión exitosa", email_message, "SUCORREO@gmail.com")
-
-def send_email(subject, text, to):
-    """
-    Esta función se ejecuta para enviar un correo electrónico al finalizar el proceso.
-
-    Parámetros:
-    subject -- Asunto del correo electrónico.
-    text -- Texto del correo electrónico.
-    to -- Destinatario del correo electrónico.
-    """
-    # Carga las variables de entorno del archivo .env
-    load_dotenv()
-
-    # Hacemos una solicitud POST a la API de Mailgun
-    response = requests.post(
-        # La URL de la API de Mailgun para enviar correos electrónicos
-        "https://api.mailgun.net/v3/mail.SUDOMINIO.com.co/messages",
-        # Usamos la autenticación básica de HTTP con la clave API de Mailgun
-        auth=("api", os.getenv("MAILGUN_API_KEY")),
-        # Los datos del correo electrónico
-        data={"from": "noreply@mail.SUDOMINIO.com.co",
-            "to": [to],
-            "subject": subject,
-            "text": text})
-
-    # Devuelve True si el correo electrónico fue enviado con éxito, False en caso contrario
-    if response.status_code == 200:
-        print("Se envio una confirmacion de proceso finalizado al Correo electrónico.")
-        return True
-    else:
-        print("Error al enviar el correo electrónico.")
-        return False
-    
+  
 if compression_option == '1':
     # Solicita la cantidad de videos a comprimir
     cantidad_videos = int(input("Ingrese la cantidad de videos a comprimir: ").strip())
 
     # Lista para almacenar las rutas de los videos
-    rutas_videos = []
+    rutas_videos = []   
 
     for i in range(cantidad_videos):
         # Solicita la ruta del archivo de origen convirtiendo la ruta en relativa para que acepte espacios en el nombre del archivo o en la ruta del directorio que lo contiene
         ruta_origen = input(f"Ingrese la ruta del archivo de origen {i+1}: ").strip()
+        # Se agrega la ruta a la lista
         rutas_videos.append(ruta_origen)
               
     # Procesa cada video
     for ruta_origen in rutas_videos:
-        ruta_origen = os.path.abspath(ruta_origen)  # Asegura que la ruta es absoluta
-
         # Obtiene la ruta del directorio del archivo de origen
         ruta_directorio = os.path.dirname(ruta_origen)
 
@@ -220,10 +179,9 @@ if compression_option == '1':
 else:
     # Solicita la ruta del directorio con los videos
     directory = input("Ingrese la ruta del directorio con los videos: ").strip()
+    directory = directory.replace('\\', '/')  # Reemplaza las barras invertidas con barras normales
+    directory = os.path.abspath(directory) # Convierte la ruta en absoluta
     
-    # Expande la ruta del directorio y reemplaza las secuencias de escape de barra invertida y espacio con un espacio
-    directory = directory.replace('\\', '')
-
     # Verifica si el directorio existe
     if not os.path.isdir(directory):
         print("El directorio ingresado no existe. Por favor, intente de nuevo.")
@@ -239,8 +197,6 @@ else:
 
     # Procesa cada video
     for ruta_origen in rutas_videos:
-        ruta_origen = os.path.abspath(ruta_origen)  # Asegura que la ruta es absoluta
-
         # Obtiene la ruta del directorio del archivo de origen
         ruta_directorio = os.path.dirname(ruta_origen)
 
@@ -259,4 +215,4 @@ alert_success()
 
 # Si el usuario eligió apagar el Mac, lo apaga
 if shutdown == '1':
-    os.system('shutdown -h now')
+    os.system('shutdown /s /t 0')

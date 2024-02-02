@@ -1,12 +1,8 @@
 import subprocess
 import os
 import sys
-from dotenv import load_dotenv
-import requests
 import time
 import getpass
-import glob
-
 
 # Variables globales para almacenar las estadísticas de compresión
 total_videos = 0
@@ -62,8 +58,7 @@ def shutdown_option():
     return shutdown, compression_option
 
 # Llama a la función de opción de apagado al inicio del script y guarda la elección del usuario
-shutdown, compression_option = shutdown_option()    
-
+shutdown, compression_option = shutdown_option()
 
 def comprimir_video(ruta_origen, ruta_destino):
     """
@@ -92,12 +87,18 @@ def comprimir_video(ruta_origen, ruta_destino):
 
     # Registra el tiempo de inicio de la compresión
     start_time = time.time()
+    
+    # En lugar de './HandBrakeCLI', usa la ruta completa al ejecutable HandBrakeCLI
+    handbrakecli_path = os.path.join(os.path.dirname(__file__), 'HandBrakeCLI')
 
     # Comando para comprimir el video
-    comando = ['/Applications/HandBrakeCLI', '-i', f'"{ruta_origen}"', '-o', f'"{ruta_destino}"', '-f', 'mp4', '--optimize', '-e', 'x264', '-q', '26', '-r', '30', '-E', 'ca_aac', '-B', '96', '-w', '1920']
+    comando = [handbrakecli_path, '-i', f'"{ruta_origen}"', '-o', f'"{ruta_destino}"', '-f', 'mp4', '--optimize', '-e', 'x264', '-q', '26', '-r', '30', '-E', 'ca_aac', '-B', '96', '-w', '1920']
 
     # Ejecuta el comando
     subprocess.run(' '.join(comando), shell=True)
+    
+    # Espera un poco antes de obtener el tamaño del archivo de video comprimido
+    time.sleep(3)
     
     # Obtiene el tamaño del video después de la compresión
     compressed_size = os.path.getsize(ruta_destino)
@@ -144,52 +145,17 @@ def alert_success():
     space_saved_gb = space_saved / (1024 ** 3)
     
     # Genera un sonido de alerta en caso de éxito
-    os.system('afplay ok-notification-alert.wav')
+    # os.system('afplay ok-notification-alert.wav')
     
-    # Prepara el mensaje del correo electrónico
-    email_message = (
+    # Muestra las estadísticas en la terminal
+    print(
         f"La compresión de sus videos se realizó satisfactoriamente. Aquí están las estadísticas de la compresión:\n\n"
         f"Cantidad de videos comprimidos: {total_videos}\n"
         f"Tiempo total de compresión: {int(compression_time_hours)} hr: {int(compression_time_minutes)} min\n"
         f"Porcentaje de compresión: {percent_space_saved:.2f}%\n"
-        f"Espacio ahorrado: {space_saved_gb:.2f} GB"
+        f"Espacio ganado: {space_saved_gb:.2f} GB"
     )
-
-    # Envía el correo electrónico
-    send_email("Compresión exitosa", email_message, "SUCORREO@gmail.com")
-
-def send_email(subject, text, to):
-    """
-    Esta función se ejecuta para enviar un correo electrónico al finalizar el proceso.
-
-    Parámetros:
-    subject -- Asunto del correo electrónico.
-    text -- Texto del correo electrónico.
-    to -- Destinatario del correo electrónico.
-    """
-    # Carga las variables de entorno del archivo .env
-    load_dotenv()
-
-    # Hacemos una solicitud POST a la API de Mailgun
-    response = requests.post(
-        # La URL de la API de Mailgun para enviar correos electrónicos
-        "https://api.mailgun.net/v3/mail.SUDOMINIO.com.co/messages",
-        # Usamos la autenticación básica de HTTP con la clave API de Mailgun
-        auth=("api", os.getenv("MAILGUN_API_KEY")),
-        # Los datos del correo electrónico
-        data={"from": "noreply@mail.SUDOMINIO.com.co",
-            "to": [to],
-            "subject": subject,
-            "text": text})
-
-    # Devuelve True si el correo electrónico fue enviado con éxito, False en caso contrario
-    if response.status_code == 200:
-        print("Se envio una confirmacion de proceso finalizado al Correo electrónico.")
-        return True
-    else:
-        print("Error al enviar el correo electrónico.")
-        return False
-    
+  
 if compression_option == '1':
     # Solicita la cantidad de videos a comprimir
     cantidad_videos = int(input("Ingrese la cantidad de videos a comprimir: ").strip())
@@ -204,8 +170,6 @@ if compression_option == '1':
               
     # Procesa cada video
     for ruta_origen in rutas_videos:
-        ruta_origen = os.path.abspath(ruta_origen)  # Asegura que la ruta es absoluta
-
         # Obtiene la ruta del directorio del archivo de origen
         ruta_directorio = os.path.dirname(ruta_origen)
 
@@ -239,8 +203,6 @@ else:
 
     # Procesa cada video
     for ruta_origen in rutas_videos:
-        ruta_origen = os.path.abspath(ruta_origen)  # Asegura que la ruta es absoluta
-
         # Obtiene la ruta del directorio del archivo de origen
         ruta_directorio = os.path.dirname(ruta_origen)
 
