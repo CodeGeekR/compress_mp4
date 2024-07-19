@@ -165,7 +165,7 @@ def alert_success():
     )
 
     # Envía el correo electrónico
-    send_email("Compresión exitosa", email_message, "SUCORREO@gmail.com")
+    send_email("Compresión exitosa", email_message, "sammydn7@gmail.com")
 
 def send_email(subject, text, to):
     """
@@ -182,11 +182,11 @@ def send_email(subject, text, to):
     # Hacemos una solicitud POST a la API de Mailgun
     response = requests.post(
         # La URL de la API de Mailgun para enviar correos electrónicos
-        "https://api.mailgun.net/v3/mail.SUDOMINIO.com.co/messages",
+        "https://api.mailgun.net/v3/mail.colombianmacstore.com.co/messages",
         # Usamos la autenticación básica de HTTP con la clave API de Mailgun
         auth=("api", os.getenv("MAILGUN_API_KEY")),
         # Los datos del correo electrónico
-        data={"from": "noreply@mail.SUDOMINIO.com.co",
+        data={"from": "noreply@mail.colombianmacstore.com.co",
             "to": [to],
             "subject": subject,
             "text": text})

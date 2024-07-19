@@ -3,6 +3,7 @@ import os
 import sys
 import time
 import ctypes
+import ctypes.wintypes
 
 # Variables globales para almacenar las estadísticas de compresión
 total_videos = 0
@@ -71,9 +72,10 @@ def comprimir_video(ruta_origen, ruta_destino):
     # Incrementa el total de videos
     total_videos += 1
 
-    # Reemplaza las barras invertidas en las rutas de los archivos con barras normales
-    ruta_origen = ruta_origen.replace('\\', '/') 
+    # Reemplaza las barras invertidas en las rutas de los archivos con barras normales y una sola barra invertida por cada barra normal
+    ruta_origen = ruta_origen.replace('\\', '/')
     ruta_destino = ruta_destino.replace('\\', '/')
+       
     
     # Convierte la ruta en absoluta para que acepte espacios en el nombre del archivo o en la ruta del directorio que lo contiene
     # ruta_origen = os.path.abspath(ruta_origen) 
@@ -96,8 +98,8 @@ def comprimir_video(ruta_origen, ruta_destino):
     # Comando para comprimir el video
     comando = [handbrakecli_path, '-i', ruta_origen, '-o', ruta_destino, '-f', 'mp4', '--optimize', '-e', 'x264', '-q', '26', '-r', '30', '-E', 'ca_aac', '-B', '96', '-w', '1920']
 
-    # Ejecuta el comando
-    subprocess.run(comando, shell=False)
+    comando = ' '.join(f'"{i}"' if ' ' in i else i for i in comando)
+    subprocess.run(comando, shell=True)
     
     # Espera un poco antes de obtener el tamaño del archivo de video comprimido
     time.sleep(3)
@@ -180,7 +182,7 @@ else:
     # Solicita la ruta del directorio con los videos
     directory = input("Ingrese la ruta del directorio con los videos: ").strip()
     directory = directory.replace('\\', '/')  # Reemplaza las barras invertidas con barras normales
-    directory = os.path.abspath(directory) # Convierte la ruta en absoluta
+    # directory = os.path.abspath(directory) # Convierte la ruta en absoluta
     
     # Verifica si el directorio existe
     if not os.path.isdir(directory):
