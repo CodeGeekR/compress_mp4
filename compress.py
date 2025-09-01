@@ -8,6 +8,7 @@ import getpass
 import glob
 from send2trash import send2trash
 import re
+import shutil
 
 # Global variables to store compression statistics
 total_videos = 0
@@ -15,22 +16,41 @@ total_compression_time = 0
 total_original_size = 0
 total_compressed_size = 0
 
+def find_handbrake_cli():
+    """
+    Finds the HandBrakeCLI executable.
+    Checks the system's PATH first, then checks the default /Applications location.
+    """
+    path = shutil.which('HandBrakeCLI')
+    if path:
+        return path
+
+    default_path = '/Applications/HandBrakeCLI'
+    if os.path.isfile(default_path):
+        return default_path
+
+    return None
+
 def get_compression_mode():
     """
     This function asks the user to select the compression mode.
     """
-    print("Select the compression mode:")
+    print("Seleccione el modo de compresión:")
     while True:
         mode = input(
-            "How do you want to process the videos?\n"
-            " [1] CPU only (High Quality, Slower)\n"
-            " [2] Hardware Acceleration (GPU) (Good Quality, Faster)\n"
+            "¿Cómo desea realizar el proceso?\n"
+            " [1] Solo CPU (Alta Calidad, Más Lento)\n"
+            " [2] CPU + GPU (Aceleración por Hardware)\n"
+            " [3] Solo GPU (Aceleración por Hardware)\n"
             " : "
         ).strip()
-        if mode in ['1', '2']:
-            return 'cpu' if mode == '1' else 'gpu'
+        if mode in ['1', '2', '3']:
+            if mode == '1':
+                return 'cpu'
+            else:
+                return 'gpu' # Both 2 and 3 map to GPU acceleration
         else:
-            print("Please enter 1 or 2.")
+            print("Por favor, ingrese 1, 2 o 3.")
 
 def get_all_videos(directory):
     """
@@ -47,28 +67,28 @@ def shutdown_option():
     """
     This function asks the user if they want the Mac to shut down after the compression process is finished.
     """
-    print("Thank you for using Compress MP4, your files will be saved in the same directory as the source files!")
+    print("¡Gracias por usar Compress MP4, sus archivos se guardarán en el mismo directorio que los archivos de origen!")
     while True:
-        shutdown = input("Do you want the Mac to shut down when the compression process is finished? \n [1] YES, shut down \n [2] NO, don't shut down \n : ").strip()
+        shutdown = input("¿Desea que el Mac se apague cuando finalice el proceso de compresión? \n [1] SI apagar \n [2] NO apagar \n : ").strip()
         if shutdown in ['1', '2']:
             break
         else:
-            print("Please enter 1 or 2.")
+            print("Por favor, ingrese 1 o 2.")
 
     if shutdown == '1':
         if os.geteuid() != 0:
-            print("To shut down the Mac, you must run this script as a superuser. Try running the script with 'sudo'.")
+            print("Para apagar el Mac debes ejecutar este script como superusuario. Intenta ejecutar el script con 'sudo'.")
             sys.exit()
 
     while True:
-        compression_option = input("How do you want to compress the videos? \n [1] Enter individual video paths \n [2] Enter a directory path with videos \n : ").strip()
+        compression_option = input("¿Cómo desea comprimir los videos? \n [1] Ingresar rutas de videos individuales \n [2] Ingresar ruta de un directorio con videos \n : ").strip()
         if compression_option in ['1', '2']:
             break
         else:
-            print("Please enter 1 or 2.")
+            print("Por favor, ingrese 1 o 2.")
     return shutdown, compression_option
 
-def compress_video(source_path, dest_path, mode):
+def compress_video(source_path, dest_path, mode, handbrake_path):
     """
     This function compresses a video using HandBrakeCLI, showing progress.
     """
@@ -80,17 +100,17 @@ def compress_video(source_path, dest_path, mode):
         original_size = os.path.getsize(source_path)
         total_original_size += original_size
     except FileNotFoundError:
-        print(f"Error: Source file not found at {source_path}")
+        print(f"Error: No se encontró el archivo de origen en {source_path}")
         return
 
     start_time = time.time()
 
     encoder = 'x264' if mode == 'cpu' else 'vt_h264'
 
-    print(f"\nCompressing with {mode.upper()}: {os.path.basename(source_path)}")
+    print(f"\nComprimiendo con {mode.upper()}: {os.path.basename(source_path)}")
 
     command = [
-        '/Applications/HandBrakeCLI',
+        handbrake_path,
         '-i', source_path,
         '-o', dest_path,
         '-f', 'mp4',
@@ -104,25 +124,24 @@ def compress_video(source_path, dest_path, mode):
     ]
 
     try:
-        process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
+        process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True, encoding='utf-8', errors='ignore')
 
-        # Regex to find percentage in HandBrakeCLI output
         progress_regex = re.compile(r"Encoding: task \d+ of \d+, (\d+\.\d+)\s*%")
 
         for line in process.stdout:
             match = progress_regex.search(line)
             if match:
                 percent = float(match.group(1))
-                sys.stdout.write(f"\rProgress: {int(percent)}%")
+                sys.stdout.write(f"\rProgreso: {int(percent)}%")
                 sys.stdout.flush()
 
         process.wait()
 
         if process.returncode != 0:
-            print(f"\nError compressing video: {os.path.basename(source_path)}. HandBrakeCLI returned error code {process.returncode}.")
+            print(f"\nError al comprimir el video: {os.path.basename(source_path)}. HandBrakeCLI devolvió el código de error {process.returncode}.")
             return
 
-        sys.stdout.write(f"\rProgress: 100% - Complete!      \n")
+        sys.stdout.write(f"\rProgreso: 100% - ¡Completado!      \n")
         sys.stdout.flush()
 
         compressed_size = os.path.getsize(dest_path)
@@ -131,12 +150,8 @@ def compress_video(source_path, dest_path, mode):
 
         send2trash(source_path)
 
-    except FileNotFoundError:
-        print("\nError: '/Applications/HandBrakeCLI' not found.")
-        print("Please ensure HandBrakeCLI is installed in your Applications folder.")
-        sys.exit(1)
     except Exception as e:
-        print(f"\nAn unexpected error occurred during compression of {os.path.basename(source_path)}: {e}")
+        print(f"\nOcurrió un error inesperado durante la compresión de {os.path.basename(source_path)}: {e}")
 
 def alert_success():
     """
@@ -146,7 +161,7 @@ def alert_success():
     global total_videos, total_compression_time, total_original_size, total_compressed_size
 
     if total_videos == 0:
-        print("No videos were compressed.")
+        print("No se comprimió ningún video.")
         return
 
     compression_time_minutes, _ = divmod(total_compression_time, 60)
@@ -163,14 +178,14 @@ def alert_success():
     os.system('afplay ok-notification-alert.wav')
     
     email_message = (
-        f"The compression of your videos was completed successfully. Here are the compression statistics:\n\n"
-        f"Number of compressed videos: {total_videos}\n"
-        f"Total compression time: {int(compression_time_hours)} hr: {int(compression_time_minutes)} min\n"
-        f"Compression percentage: {percent_space_saved:.2f}%\n"
-        f"Space saved: {space_saved_gb:.2f} GB"
+        f"La compresión de sus videos se realizó satisfactoriamente. Aquí están las estadísticas de la compresión:\n\n"
+        f"Cantidad de videos comprimidos: {total_videos}\n"
+        f"Tiempo total de compresión: {int(compression_time_hours)} hr: {int(compression_time_minutes)} min\n"
+        f"Porcentaje de compresión: {percent_space_saved:.2f}%\n"
+        f"Espacio ahorrado: {space_saved_gb:.2f} GB"
     )
 
-    send_email("Compression successful", email_message, "sammydn7@gmail.com")
+    send_email("Compresión exitosa", email_message, "sammydn7@gmail.com")
 
 def send_email(subject, text, to):
     """
@@ -186,21 +201,20 @@ def send_email(subject, text, to):
                   "subject": subject,
                   "text": text})
         if response.status_code == 200:
-            print("A confirmation of the completed process has been sent to the email.")
+            print("Se envió una confirmación del proceso finalizado al correo electrónico.")
             return True
         else:
-            print(f"Error sending the email. Status code: {response.status_code}, Response: {response.text}")
+            print(f"Error al enviar el correo electrónico. Código de estado: {response.status_code}, Respuesta: {response.text}")
             return False
     except Exception as e:
-        print(f"An error occurred while sending the email: {e}")
+        print(f"Ocurrió un error al enviar el correo electrónico: {e}")
         return False
 
-def process_videos(video_paths, mode):
+def process_videos(video_paths, mode, handbrake_path):
     for source_path in video_paths:
-        # Handle escaped spaces from terminal input
         source_path = source_path.replace('\\', '')
         if not os.path.isfile(source_path):
-            print(f"File not found: {source_path}. Skipping.")
+            print(f"Archivo no encontrado: {source_path}. Saltando.")
             continue
 
         source_path = os.path.abspath(source_path)
@@ -210,39 +224,45 @@ def process_videos(video_paths, mode):
         compressed_file_name = f"{base_name}_compressed{extension}"
         dest_path = os.path.join(dir_path, compressed_file_name)
 
-        compress_video(source_path, dest_path, mode)
+        compress_video(source_path, dest_path, mode, handbrake_path)
 
 # --- Main script execution ---
 if __name__ == "__main__":
+    handbrake_cli_path = find_handbrake_cli()
+    if not handbrake_cli_path:
+        print("\nError: No se pudo encontrar 'HandBrakeCLI'.")
+        print("Asegúrese de que HandBrakeCLI esté instalado en su PATH o en la carpeta /Applications.")
+        sys.exit(1)
+
     shutdown, compression_option = shutdown_option()
     compression_mode = get_compression_mode()
 
     if compression_option == '1':
         try:
-            amount_videos = int(input("Enter the number of videos to compress: ").strip())
+            amount_videos = int(input("Ingrese la cantidad de videos a comprimir: ").strip())
             video_paths = [
-                input(f"Enter the source file path {i+1}: ").strip()
+                input(f"Ingrese la ruta del archivo de origen {i+1}: ").strip()
                 for i in range(amount_videos)
             ]
-            process_videos(video_paths, compression_mode)
+            process_videos(video_paths, compression_mode, handbrake_cli_path)
         except ValueError:
-            print("Invalid input. Please enter a number.")
+            print("Entrada no válida. Por favor, ingrese un número.")
             sys.exit()
     else:
-        directory = input("Enter the directory path with the videos: ").strip().replace('\\', '')
+        directory = input("Ingrese la ruta del directorio con los videos: ").strip().replace('\\', '')
         if not os.path.isdir(directory):
-            print("The entered directory does not exist. Please try again.")
+            print("El directorio ingresado no existe. Por favor, intente de nuevo.")
             sys.exit()
 
         video_paths = get_all_videos(directory)
         if not video_paths:
-            print("No videos were found in the entered directory. Please try again.")
+            print("No se encontraron videos en el directorio ingresado. Por favor, intente de nuevo.")
             sys.exit()
 
-        process_videos(video_paths, compression_mode)
+        process_videos(video_paths, compression_mode, handbrake_cli_path)
 
     alert_success()
 
     if shutdown == '1':
-        print("Shutting down the Mac...")
+        print("Apagando el Mac...")
         os.system('shutdown -h now')
