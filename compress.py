@@ -100,7 +100,7 @@ def compress_video(source_path, dest_path, mode):
         '-r', '30',
         '-E', 'ca_aac',
         '-B', '96',
-        '-w', '1920'
+        '--max-width', '1920'
     ]
 
     try:
