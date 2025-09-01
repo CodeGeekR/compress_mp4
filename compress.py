@@ -94,12 +94,28 @@ def compress_video(source_path, dest_path, mode):
 
     try:
         stream = ffmpeg.input(source_path)
+
+        # Scale to 1920 width, preserving aspect ratio.
+        # The filter 'scale=1920:-2' ensures the height is auto-calculated and divisible by 2.
+        stream = ffmpeg.filter(stream, 'scale', '1920', '-2')
+
+        output_params = {
+            'acodec': 'aac',
+            'audio_bitrate': '96k',
+            'r': 30,
+            'movflags': '+faststart'
+        }
+
         if mode == 'gpu':
             print(f"Compressing with GPU: {source_path}")
-            stream = ffmpeg.output(stream, dest_path, vcodec='h264_videotoolbox', acodec='aac', audio_bitrate='96k', qp=26, r=30, s='1920x1080')
+            output_params['vcodec'] = 'h264_videotoolbox'
+            output_params['qp'] = 26
         else:
             print(f"Compressing with CPU: {source_path}")
-            stream = ffmpeg.output(stream, dest_path, vcodec='libx264', acodec='aac', audio_bitrate='96k', crf=26, r=30, s='1920x1080')
+            output_params['vcodec'] = 'libx264'
+            output_params['crf'] = 26
+
+        stream = ffmpeg.output(stream, dest_path, **output_params)
 
         ffmpeg.run(stream, overwrite_output=True, quiet=True)
 
@@ -178,7 +194,7 @@ if compression_option == '1':
 
     video_paths = []
     for i in range(amount_videos):
-        source_path = input(f"Enter the source file path {i+1}: ").strip()
+        source_path = input(f"Enter the source file path {i+1}: ").strip().replace('\\', '')
         video_paths.append(source_path)
               
     for source_path in video_paths:
@@ -190,7 +206,7 @@ if compression_option == '1':
         dest_path = os.path.join(dir_path, compressed_file_name)
         compress_video(source_path, dest_path, compression_mode)
 else:
-    directory = input("Enter the directory path with the videos: ").strip()
+    directory = input("Enter the directory path with the videos: ").strip().replace('\\', '')
     
     if not os.path.isdir(directory):
         print("The entered directory does not exist. Please try again.")
