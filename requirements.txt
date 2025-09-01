@@ -5,3 +5,4 @@ python-dotenv==1.0.1
 requests==2.31.0
 Send2Trash==1.8.2
 urllib3==2.1.0
+ffmpeg-python==0.2.0
