@@ -94,15 +94,22 @@ def compress_video(source_path, dest_path, mode, handbrake_path):
     """
     global total_videos, total_compression_time, total_original_size, total_compressed_size
 
-    total_videos += 1
-    
-    try:
-        original_size = os.path.getsize(source_path)
-        total_original_size += original_size
-    except FileNotFoundError:
-        print(f"Error: No se encontró el archivo de origen en {source_path}")
+    # --- Pre-compression Safety Checks ---
+    # 1. Check for write permissions in the destination directory
+    dest_dir = os.path.dirname(dest_path)
+    if not os.access(dest_dir, os.W_OK):
+        print(f"\nError: No hay permisos de escritura en el directorio de destino: '{dest_dir}'")
         return
 
+    # 2. Check if source file exists before processing
+    try:
+        original_size = os.path.getsize(source_path)
+    except FileNotFoundError:
+        print(f"\nError: No se encontró el archivo de origen en {source_path}")
+        return
+
+    total_videos += 1
+    total_original_size += original_size
     start_time = time.time()
 
     encoder = 'x264' if mode == 'cpu' else 'vt_h264'
@@ -143,6 +150,17 @@ def compress_video(source_path, dest_path, mode, handbrake_path):
 
         sys.stdout.write(f"\rProgreso: 100% - ¡Completado!      \n")
         sys.stdout.flush()
+
+        # --- Post-compression Safety Check ---
+        if not os.path.isfile(dest_path):
+            print(f"\nError: HandBrakeCLI finalizó pero el archivo de salida no fue encontrado.")
+            print(f"Verifique los permisos y el espacio en disco para la ruta: '{dest_path}'")
+            # Since the source file was not deleted, we can just stop here.
+            # We also don't count this video in the final stats by returning early.
+            # To do that, we need to decrement the counter.
+            total_videos -= 1
+            total_original_size -= original_size
+            return
 
         compressed_size = os.path.getsize(dest_path)
         total_compressed_size += compressed_size
