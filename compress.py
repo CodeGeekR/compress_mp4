@@ -203,19 +203,31 @@ def alert_success():
         f"Espacio ahorrado: {space_saved_gb:.2f} GB"
     )
 
-    send_email("Compresión exitosa", email_message, "sammydn7@gmail.com")
+    send_email("Compresión exitosa", email_message)
 
-def send_email(subject, text, to):
+def send_email(subject, text):
     """
     This function sends an email when the process is finished.
+    It loads configuration from the .env file.
     """
     load_dotenv()
+
+    mailgun_api_key = os.getenv("MAILGUN_API_KEY")
+    mailgun_api_url = os.getenv("MAILGUN_API_URL")
+    mailgun_from_email = os.getenv("MAILGUN_FROM_EMAIL")
+    mailgun_to_email = os.getenv("MAILGUN_TO_EMAIL")
+
+    if not all([mailgun_api_key, mailgun_api_url, mailgun_from_email, mailgun_to_email]):
+        print("\nAdvertencia: Faltan las variables de entorno de Mailgun en el archivo .env. No se enviará el correo electrónico.")
+        print("Variables requeridas: MAILGUN_API_KEY, MAILGUN_API_URL, MAILGUN_FROM_EMAIL, MAILGUN_TO_EMAIL")
+        return False
+
     try:
         response = requests.post(
-            "https://api.mailgun.net/v3/mail.colombianmacstore.com.co/messages",
-            auth=("api", os.getenv("MAILGUN_API_KEY")),
-            data={"from": "noreply@mail.colombianmacstore.com.co",
-                  "to": [to],
+            mailgun_api_url,
+            auth=("api", mailgun_api_key),
+            data={"from": mailgun_from_email,
+                  "to": [mailgun_to_email],
                   "subject": subject,
                   "text": text})
         if response.status_code == 200:

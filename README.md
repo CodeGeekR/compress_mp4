@@ -2,17 +2,17 @@
 
 [![Python](https://img.shields.io/badge/Python-yellow?style=for-the-badge&logo=python&logoColor=white&labelColor=101010)](https://www.python.org)
 
+Este script de Python está diseñado para comprimir múltiples videos utilizando HandBrakeCLI en un sistema operativo macOS. El script está optimizado para proporcionar una alta tasa de compresión, reduciendo el tamaño del video significativamente, manteniendo una calidad de video aceptable.
 
-Este script de Python está diseñado para comprimir múltiples videos utilizando HandBrakeCLI en un sistema operativo macOS. El script está optimizado para proporcionar una alta tasa de compresión, reduciendo el tamaño del video en más del 80% en la mayoría de los casos, manteniendo una calidad de video aceptable. Al finalizar el proceso de compresión de todos los videos, el script notificará con un sonido y enviará un correo electrónico mediante el servicio Mailgun (es necesario configurar las variables de entorno para el servicio Mailgun en un archivo `.env`).
+## Características Principales
 
-## Nuevas Funcionalidades
-
-- Se envian estadisticas de compresión de video al correo electronico
-- El script ahora puede manejar errores
-- Se ha mejorado la velocidad de compresión en un 15%
-- Funcion de apagar Mac cuando finalice el proceso de compresión
-- Al finalizar la compresión envia el archivo de origen a la papelera
-- Se lanza el primer release para Mac mostrando las estadisticas al final del proceso de compresión de video.
+- **Aceleración por Hardware (GPU)**: Utiliza la potencia de la GPU de los chips Apple Silicon (M1, M2, M3, etc.) para acelerar el proceso de compresión.
+- **Menú de Selección de Compresión**: Permite elegir entre compresión por CPU (alta calidad, más lento) o GPU (alta velocidad).
+- **Notificaciones por Correo Electrónico**: Envía un resumen con estadísticas de la compresión al finalizar (configurable).
+- **Manejo de Errores Mejorado**: El script es robusto y maneja errores comunes como la falta de permisos o la no localización de `HandBrakeCLI`.
+- **Barra de Progreso en Tiempo Real**: Muestra el progreso de la compresión de cada video.
+- **Función de Apagado**: Opción para apagar el Mac automáticamente al finalizar.
+- **Envío a la Papelera**: El video original se envía a la papelera de forma segura después de una compresión exitosa.
 
 <p align="center">
   <img src="https://github.com/CodeGeekR/compress_mp4/blob/main/images/stadists_mail.jpg?raw=true" alt="Estadisticas en e-mail">
@@ -21,71 +21,62 @@ Este script de Python está diseñado para comprimir múltiples videos utilizand
 ## Requisitos
 
 - macOS
+- Python 3
 - HandBrakeCLI
 
 ## Instalación
 
-Descargue HandBrakeCLI desde el <a href="https://handbrake.fr/downloads2.php" target="_blank">sitio oficial de HandBrake</a>
+1.  **Instalar HandBrakeCLI**:
+    Descargue HandBrakeCLI desde el <a href="https://handbrake.fr/downloads2.php" target="_blank">sitio oficial de HandBrake</a>. Asegúrese de que `HandBrakeCLI` esté en su carpeta de `/Applications` o que su ubicación esté incluida en el `PATH` del sistema para que el script pueda encontrarlo.
 
-Una vez descargado, copie HandBrakeCLI en su carpeta de Aplicaciones.
+2.  **Clonar el Repositorio**:
+    ```bash
+    git clone https://github.com/CodeGeekR/compress_mp4.git
+    cd compress_mp4
+    ```
+
+3.  **Configurar Entorno Virtual e Instalar Dependencias**:
+    ```bash
+    python3 -m venv env
+    source env/bin/activate
+    pip install -r requirements.txt
+    ```
+
+## Configuración de Notificaciones (Opcional)
+
+Para recibir notificaciones por correo electrónico, debe crear un archivo llamado `.env` en la raíz del proyecto.
+
+1.  Cree el archivo `.env`:
+    ```bash
+    touch .env
+    ```
+2.  Añada las siguientes variables al archivo `.env` con sus propios valores del servicio Mailgun:
+    ```
+    MAILGUN_API_KEY="key-yourkeyhere"
+    MAILGUN_API_URL="https://api.mailgun.net/v3/your.domain.com/messages"
+    MAILGUN_FROM_EMAIL="Compress MP4 <noreply@your.domain.com>"
+    MAILGUN_TO_EMAIL="your-email@example.com"
+    ```
+Si no se configuran estas variables, el script mostrará una advertencia y continuará sin enviar correos electrónicos.
 
 ## Uso
 
-1. Clona este repositorio en tu máquina local:
+1.  Active el entorno virtual (si no está activo):
+    ```bash
+    source env/bin/activate
+    ```
 
-   ```bash copyable
-   git clone https://github.com/CodeGeekR/compress_mp4.git
-
-   ```
-
-2. Navega hasta el directorio del proyecto en la terminal:
-
-   ```bash copyable
-   cd <ruta_carpeta>
-   ```
-
-3. Crea un entorno virtual:
-
-   ```bash copyable
-   python3 -m venv env
-   ```
-
-4. Activa el entorno virtual:
-   ```bash copyable
-   source env/bin/activate
-   ```
-
-5. Instala las dependencias necesarias desde el archivo requirements.txt:
-   ```bash copyable
-   pip install -r requirements.txt
-   ```
-
-6. Ejecuta el script, escribe el número de videos a comprimir y copia la ruta de cada video:
-
-   ```bash copyable
-   python compress.py
-   ```
-
-El script comprime los videos uno tras otro, utilizando HandBrakeCLI. Solicita la cantidad de videos a comprimir y las rutas de los videos. Los videos comprimidos se guardan en el mismo directorio que los archivos de origen, con un sufijo "_compress" en el nombre del archivo.  El video de salida será un archivo MP4 optimizado, con una tasa de compresión de más del 80%, una resolución de 1080p, una tasa de cuadros de 30 fps, y una tasa de bits de audio de 96 kbps.
+2.  Ejecute el script:
+    ```bash
+    python3 compress.py
+    ```
+    El script le guiará a través de las opciones para seleccionar los videos y el modo de compresión. Los videos resultantes se guardarán en el mismo directorio que los archivos de origen con el sufijo `_compressed`.
 
 ## Contribuye
 
 ¡Te invito a contribuir a este proyecto y hacerlo aún mejor! 😊
 
-Si te gusta este proyecto, no olvides darle una Star ⭐️ en GitHub.
-
-Si deseas contribuir con código, sigue estos pasos:
-
-Haz un fork de este repositorio.
-
-- Crea una rama con tu nueva funcionalidad: git checkout -b feature/nueva-funcionalidad.
-- Realiza tus cambios y realiza commits: git commit -m "Añade nueva funcionalidad".
-- Envía tus cambios a tu repositorio remoto: git push origin feature/nueva-funcionalidad.
-- Abre un Pull Request en este repositorio principal.
-
-Si encuentras algún problema o tienes alguna sugerencia, abre un Issue en el repositorio. Estaré encantado de ayudarte.
-
-Comparte este proyecto con tus amigos y colegas.
+Si te gusta este proyecto, no olvides darle una Star ⭐️ en GitHub. Si encuentras algún problema o tienes alguna sugerencia, abre un Issue en el repositorio. Estaré encantado de ayudarte.
 
 Agradecimientos
-¡Gracias por tu interés en este proyecto! Esperamos que sea útil y te diviertas explorando y contribuyendo. Si tienes alguna pregunta, no dudes en contactarme.
+¡Gracias por tu interés en este proyecto! Esperamos que sea útil. Si tienes alguna pregunta, no dudes en contactarme.
