@@ -6,7 +6,6 @@ import requests
 import time
 import getpass
 import glob
-import ffmpeg
 from send2trash import send2trash
 import re
 
@@ -24,8 +23,8 @@ def get_compression_mode():
     while True:
         mode = input(
             "How do you want to process the videos?\n"
-            " [1] CPU only\n"
-            " [2] Hardware Acceleration (GPU)\n"
+            " [1] CPU only (High Quality, Slower)\n"
+            " [2] Hardware Acceleration (GPU) (Good Quality, Faster)\n"
             " : "
         ).strip()
         if mode in ['1', '2']:
@@ -69,12 +68,9 @@ def shutdown_option():
             print("Please enter 1 or 2.")
     return shutdown, compression_option
 
-shutdown, compression_option = shutdown_option()
-compression_mode = get_compression_mode()
-
 def compress_video(source_path, dest_path, mode):
     """
-    This function compresses a video using ffmpeg-python, showing progress.
+    This function compresses a video using HandBrakeCLI, showing progress.
     """
     global total_videos, total_compression_time, total_original_size, total_compressed_size
 
@@ -89,62 +85,41 @@ def compress_video(source_path, dest_path, mode):
 
     start_time = time.time()
 
+    encoder = 'x264' if mode == 'cpu' else 'vt_h264'
+
+    print(f"\nCompressing with {mode.upper()}: {os.path.basename(source_path)}")
+
+    command = [
+        '/Applications/HandBrakeCLI',
+        '-i', source_path,
+        '-o', dest_path,
+        '-f', 'mp4',
+        '--optimize',
+        '-e', encoder,
+        '-q', '26',
+        '-r', '30',
+        '-E', 'ca_aac',
+        '-B', '96',
+        '-w', '1920'
+    ]
+
     try:
-        # Get video duration for progress calculation
-        try:
-            probe = ffmpeg.probe(source_path)
-            duration = float(probe['format']['duration'])
-        except ffmpeg.Error as e:
-            print(f"Could not probe video duration for {source_path}. Progress bar disabled. Error: {e.stderr.decode()}")
-            duration = 0
+        process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True)
 
-        # Define input streams explicitly to preserve audio
-        input_stream = ffmpeg.input(source_path)
-        video_stream = input_stream.video.filter('scale', w=1920, h=-2)
-        audio_stream = input_stream.audio
+        # Regex to find percentage in HandBrakeCLI output
+        progress_regex = re.compile(r"Encoding: task \d+ of \d+, (\d+\.\d+)\s*%")
 
-        # Setup output parameters
-        output_params = {
-            'acodec': 'aac',
-            'audio_bitrate': '96k',
-            'r': 30,
-            'movflags': '+faststart'
-        }
-        if mode == 'gpu':
-            print(f"\nCompressing with GPU: {os.path.basename(source_path)}")
-            output_params['vcodec'] = 'h264_videotoolbox'
-            output_params['qp'] = 26
-        else:
-            print(f"\nCompressing with CPU: {os.path.basename(source_path)}")
-            output_params['vcodec'] = 'libx264'
-            output_params['crf'] = 26
-
-        # Create the output stream
-        stream = ffmpeg.output(video_stream, audio_stream, dest_path, **output_params)
-
-        # Compile the ffmpeg command and run it, capturing stderr
-        args = stream.compile(overwrite_output=True)
-        process = subprocess.Popen(args, stderr=subprocess.PIPE, universal_newlines=True)
-
-        time_pattern = re.compile(r"time=(\d{2}):(\d{2}):(\d{2})\.(\d{2})")
-
-        for line in process.stderr:
-            if duration > 0:
-                match = time_pattern.search(line)
-                if match:
-                    hours = int(match.group(1))
-                    minutes = int(match.group(2))
-                    seconds = int(match.group(3))
-                    current_time = float(hours * 3600 + minutes * 60 + seconds)
-                    percent = (current_time / duration) * 100
-                    sys.stdout.write(f"\rProgress: {int(percent)}% ")
-                    sys.stdout.flush()
+        for line in process.stdout:
+            match = progress_regex.search(line)
+            if match:
+                percent = float(match.group(1))
+                sys.stdout.write(f"\rProgress: {int(percent)}%")
+                sys.stdout.flush()
 
         process.wait()
 
         if process.returncode != 0:
-            print(f"\nError compressing video: {os.path.basename(source_path)}")
-            # The stderr was consumed, so we can't print it here unless we save it.
+            print(f"\nError compressing video: {os.path.basename(source_path)}. HandBrakeCLI returned error code {process.returncode}.")
             return
 
         sys.stdout.write(f"\rProgress: 100% - Complete!      \n")
@@ -156,9 +131,12 @@ def compress_video(source_path, dest_path, mode):
 
         send2trash(source_path)
 
+    except FileNotFoundError:
+        print("\nError: '/Applications/HandBrakeCLI' not found.")
+        print("Please ensure HandBrakeCLI is installed in your Applications folder.")
+        sys.exit(1)
     except Exception as e:
         print(f"\nAn unexpected error occurred during compression of {os.path.basename(source_path)}: {e}")
-
 
 def alert_success():
     """
@@ -219,6 +197,8 @@ def send_email(subject, text, to):
 
 def process_videos(video_paths, mode):
     for source_path in video_paths:
+        # Handle escaped spaces from terminal input
+        source_path = source_path.replace('\\', '')
         if not os.path.isfile(source_path):
             print(f"File not found: {source_path}. Skipping.")
             continue
@@ -234,11 +214,14 @@ def process_videos(video_paths, mode):
 
 # --- Main script execution ---
 if __name__ == "__main__":
+    shutdown, compression_option = shutdown_option()
+    compression_mode = get_compression_mode()
+
     if compression_option == '1':
         try:
             amount_videos = int(input("Enter the number of videos to compress: ").strip())
             video_paths = [
-                input(f"Enter the source file path {i+1}: ").strip().replace('\\', '')
+                input(f"Enter the source file path {i+1}: ").strip()
                 for i in range(amount_videos)
             ]
             process_videos(video_paths, compression_mode)
