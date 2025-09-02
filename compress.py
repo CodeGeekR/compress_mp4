@@ -38,14 +38,11 @@ def get_video_width(source_path, handbrake_path):
     """
     try:
         command = [handbrake_path, '-i', source_path, '--scan']
-        process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True, encoding='utf-8', errors='ignore')
-        output, errors = process.communicate()
-
-        # HandBrakeCLI prints scan info to stderr
-        scan_output = errors
+        # HandBrakeCLI prints scan info to stderr.
+        process = subprocess.run(command, capture_output=True, text=True, encoding='utf-8', errors='ignore')
 
         size_regex = re.compile(r"\+ size: (\d+)x(\d+)")
-        match = size_regex.search(scan_output)
+        match = size_regex.search(process.stderr)
 
         if match:
             return int(match.group(1)) # Group 1 is the width
@@ -150,7 +147,6 @@ def compress_video(source_path, dest_path, mode, handbrake_path):
         '-B', '96',
     ]
 
-    # Conditionally add resize parameter to prevent upscaling
     source_width = get_video_width(source_path, handbrake_path)
     if source_width > 1920:
         command.extend(['-w', '1920'])
