@@ -135,7 +135,9 @@ def compress_video(source_path, dest_path, mode, handbrake_path):
 
         progress_regex = re.compile(r"Encoding: task \d+ of \d+, (\d+\.\d+)\s*%")
 
+        full_output = []
         for line in process.stdout:
+            full_output.append(line)
             match = progress_regex.search(line)
             if match:
                 percent = float(match.group(1))
@@ -144,23 +146,24 @@ def compress_video(source_path, dest_path, mode, handbrake_path):
 
         process.wait()
 
-        if process.returncode != 0:
-            print(f"\nError al comprimir el video: {os.path.basename(source_path)}. HandBrakeCLI devolvió el código de error {process.returncode}.")
+        # --- Post-compression Safety Check ---
+        if process.returncode != 0 or not os.path.isfile(dest_path):
+            sys.stdout.write("\n") # Move to a new line after the progress bar
+            print("--------------------------------------------------")
+            print("ERROR: La compresión falló o el archivo de salida no fue creado.")
+            print(f"Código de salida de HandBrakeCLI: {process.returncode}")
+            print("--------------------------------------------------")
+            print("Registro completo de HandBrakeCLI para diagnóstico:")
+            print("".join(full_output))
+            print("--------------------------------------------------")
+
+            # Revert stats for the failed video
+            total_videos -= 1
+            total_original_size -= original_size
             return
 
         sys.stdout.write(f"\rProgreso: 100% - ¡Completado!      \n")
         sys.stdout.flush()
-
-        # --- Post-compression Safety Check ---
-        if not os.path.isfile(dest_path):
-            print(f"\nError: HandBrakeCLI finalizó pero el archivo de salida no fue encontrado.")
-            print(f"Verifique los permisos y el espacio en disco para la ruta: '{dest_path}'")
-            # Since the source file was not deleted, we can just stop here.
-            # We also don't count this video in the final stats by returning early.
-            # To do that, we need to decrement the counter.
-            total_videos -= 1
-            total_original_size -= original_size
-            return
 
         compressed_size = os.path.getsize(dest_path)
         total_compressed_size += compressed_size
