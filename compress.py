@@ -31,6 +31,30 @@ def find_handbrake_cli():
 
     return None
 
+def get_video_width(source_path, handbrake_path):
+    """
+    Gets the width of the video using HandBrakeCLI --scan.
+    Returns the width as an integer, or 0 if it can't be found.
+    """
+    try:
+        command = [handbrake_path, '-i', source_path, '--scan']
+        process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True, encoding='utf-8', errors='ignore')
+        output, errors = process.communicate()
+
+        # HandBrakeCLI prints scan info to stderr
+        scan_output = errors
+
+        size_regex = re.compile(r"\+ size: (\d+)x(\d+)")
+        match = size_regex.search(scan_output)
+
+        if match:
+            return int(match.group(1)) # Group 1 is the width
+    except Exception:
+        # If anything goes wrong, we'll just not resize.
+        return 0
+    return 0
+
+
 def get_compression_mode():
     """
     This function asks the user to select the compression mode.
@@ -94,14 +118,11 @@ def compress_video(source_path, dest_path, mode, handbrake_path):
     """
     global total_videos, total_compression_time, total_original_size, total_compressed_size
 
-    # --- Pre-compression Safety Checks ---
-    # 1. Check for write permissions in the destination directory
     dest_dir = os.path.dirname(dest_path)
     if not os.access(dest_dir, os.W_OK):
         print(f"\nError: No hay permisos de escritura en el directorio de destino: '{dest_dir}'")
         return
 
-    # 2. Check if source file exists before processing
     try:
         original_size = os.path.getsize(source_path)
     except FileNotFoundError:
@@ -127,17 +148,19 @@ def compress_video(source_path, dest_path, mode, handbrake_path):
         '-r', '30',
         '-E', 'ca_aac',
         '-B', '96',
-        '--max-width', '1920'
     ]
+
+    # Conditionally add resize parameter to prevent upscaling
+    source_width = get_video_width(source_path, handbrake_path)
+    if source_width > 1920:
+        command.extend(['-w', '1920'])
 
     try:
         process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, universal_newlines=True, encoding='utf-8', errors='ignore')
 
         progress_regex = re.compile(r"Encoding: task \d+ of \d+, (\d+\.\d+)\s*%")
 
-        full_output = []
         for line in process.stdout:
-            full_output.append(line)
             match = progress_regex.search(line)
             if match:
                 percent = float(match.group(1))
@@ -146,18 +169,8 @@ def compress_video(source_path, dest_path, mode, handbrake_path):
 
         process.wait()
 
-        # --- Post-compression Safety Check ---
         if process.returncode != 0 or not os.path.isfile(dest_path):
-            sys.stdout.write("\n") # Move to a new line after the progress bar
-            print("--------------------------------------------------")
-            print("ERROR: La compresión falló o el archivo de salida no fue creado.")
-            print(f"Código de salida de HandBrakeCLI: {process.returncode}")
-            print("--------------------------------------------------")
-            print("Registro completo de HandBrakeCLI para diagnóstico:")
-            print("".join(full_output))
-            print("--------------------------------------------------")
-
-            # Revert stats for the failed video
+            print(f"\nError al comprimir el video: {os.path.basename(source_path)}. Verifique que el archivo no esté corrupto y que HandBrakeCLI funcione correctamente.")
             total_videos -= 1
             total_original_size -= original_size
             return
