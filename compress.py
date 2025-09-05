@@ -57,14 +57,13 @@ def get_video_width(source_path, handbrake_path):
 
 def get_compression_mode():
     """
-    Presenta al usuario las estrategias de compresión y obtiene su elección.
-    Retorna: 'cpu' para el modo de máxima calidad, o 'gpu' para el modo de alta velocidad.
+    Presenta al usuario las opciones de compresión.
     """
-    print("\nSeleccione la estrategia de compresión:")
+    print("\nSeleccione el modo de compresión:")
     while True:
         mode = input(
-            " [1] Máxima Calidad (CPU, 2-pasadas, lento)\n"
-            " [2] Alta Velocidad (GPU, 1-pasada, rápido)\n"
+            " [1] CPU (Calidad Consistente)\n"
+            " [2] GPU (Velocidad Alta)\n"
             " : "
         ).strip()
         if mode in ['1', '2']:
@@ -74,9 +73,8 @@ def get_compression_mode():
 
 def compress_video(source_path, dest_path, mode, handbrake_path):
     """
-    Comprime un video usando HandBrakeCLI con una estrategia optimizada.
-    - Modo CPU: Usa 2 pasadas para máxima calidad y eficiencia de compresión.
-    - Modo GPU: Usa 1 pasada para máxima velocidad con excelente calidad.
+    Comprime un video usando HandBrakeCLI con un bitrate fijo para obtener
+    tamaños de archivo consistentes.
     """
     global total_videos, total_compression_time, total_original_size, total_compressed_size
 
@@ -95,33 +93,34 @@ def compress_video(source_path, dest_path, mode, handbrake_path):
     total_original_size += original_size
     start_time = time.time()
 
-    # --- Construcción del Comando Base ---
-    # Parámetros comunes para ambos modos de compresión.
-    command_base = [
+    # --- Parámetros de Compresión Unificados por Bitrate ---
+    # Usar un bitrate fijo es la única forma de asegurar tamaños de archivo similares.
+    TARGET_BITRATE = '4500' # en kbps, un valor excelente para 1080p H.265
+
+    command = [
         handbrake_path,
         '-i', source_path,
         '-o', dest_path,
         '-f', 'mp4',
         '--optimize',
+        '--vb', TARGET_BITRATE,
         '-r', '30',
         '-E', 'ca_aac',
         '-B', '96',
     ]
 
-    # Redimensiona solo si es necesario para no agrandar videos pequeños.
+    if mode == 'cpu':
+        print(f"\nComprimiendo con CPU (Calidad Consistente): {os.path.basename(source_path)}")
+        # 2-pasadas para que la CPU use el bitrate de la forma más eficiente posible.
+        command.extend(['-e', 'x265', '--multi-pass', '--encoder-preset', 'slow'])
+    else: # mode == 'gpu'
+        print(f"\nComprimiendo con GPU (Velocidad Alta): {os.path.basename(source_path)}")
+        # 1-pasada para GPU, ya que la aceleración por hardware no se beneficia de 2 pasadas.
+        command.extend(['-e', 'vt_h265'])
+
     source_width = get_video_width(source_path, handbrake_path)
     if source_width > 1920:
-        command_base.extend(['-w', '1920'])
-
-    # --- Estrategia de Codificación Específica por Modo ---
-    if mode == 'cpu':
-        print(f"\nComprimiendo con MÁXIMA CALIDAD (CPU): {os.path.basename(source_path)}")
-        # Codificación de 2 pasadas con bitrate de 4500 kbps para 1080p.
-        command = command_base + ['-e', 'x265', '--multi-pass', '--turbo', '--vb', '4500']
-    else: # mode == 'gpu'
-        print(f"\nComprimiendo a ALTA VELOCIDAD (GPU): {os.path.basename(source_path)}")
-        # Codificación de 1 pasada con un factor de calidad (CRF) de 20 (muy alta calidad).
-        command = command_base + ['-e', 'vt_h265', '-q', '20']
+        command.extend(['-w', '1920'])
 
     # --- Ejecución y Monitoreo del Proceso ---
     try:
