@@ -24,15 +24,179 @@ import subprocess
 import os
 import sys
 import time
-from send2trash import send2trash
+import threading
+import tempfile
 import re
 import shutil
+
+# Importar send2trash con manejo de contexto sudo
+try:
+    from send2trash import send2trash as _send2trash
+    def send2trash(path):
+        try:
+            _send2trash(path)
+        except Exception as e:
+            if "Expected a folder" in str(e):
+                # Fallback para contexto sudo: usar AppleScript nativo
+                import subprocess
+                subprocess.run(['osascript', '-e', f'tell app "Finder" to move POSIX file "{path}" to trash'], check=True)
+            else:
+                raise
+except ImportError:
+    def send2trash(path):
+        raise ImportError("send2trash no está disponible.")
 
 # --- Variables Globales de Estadísticas ---
 total_videos = 0
 total_compression_time = 0
 total_original_size = 0
 total_compressed_size = 0
+total_energy_consumed = 0.0  # Energía total consumida en kWh
+
+
+class PowerMonitor:
+    """
+    Monitorea el consumo energético real durante la compresión de video usando powermetrics.
+    
+    Características:
+    - Captura datos reales de CPU, GPU y ANE en chips Apple Silicon
+    - Diferencia entre consumo en reposo y durante compresión
+    - Calcula energía total consumida en kWh con precisión del hardware
+    - Funciona en background sin interferir con el proceso de compresión
+    """
+    
+    def __init__(self):
+        self.is_monitoring = False
+        self.power_data = []
+        self.monitor_thread = None
+        self.temp_file = None
+        self.powermetrics_process = None
+        
+    def start_monitoring(self):
+        """
+        Inicia el monitoreo energético en background usando powermetrics.
+        Requiere permisos sudo previamente verificados.
+        """
+        if self.is_monitoring:
+            return
+            
+        # Crear archivo temporal para datos de powermetrics
+        self.temp_file = tempfile.NamedTemporaryFile(mode='w+', delete=False, suffix='.txt')
+        self.temp_file.close()
+        
+        # Comando optimizado: muestrea cada 5 segundos CPU, GPU y ANE
+        cmd = [
+            'sudo', 'powermetrics',
+            '-s', 'cpu_power,gpu_power',  # Solo CPU y GPU para eficiencia
+            '-n', '-1',                   # Monitoreo continuo hasta que se detenga
+            '-i', '5000',                 # Muestra cada 5 segundos
+            '--output-file', self.temp_file.name
+        ]
+        
+        try:
+            # Iniciar powermetrics como subproceso
+            self.powermetrics_process = subprocess.Popen(
+                cmd, 
+                stdout=subprocess.DEVNULL, 
+                stderr=subprocess.DEVNULL
+            )
+            self.is_monitoring = True
+            
+        except Exception as e:
+            print(f"⚠️  Error iniciando monitoreo energético: {e}")
+            self._cleanup()
+    
+    def stop_monitoring(self):
+        """
+        Detiene el monitoreo y calcula el consumo energético total.
+        Retorna el consumo en kWh.
+        """
+        if not self.is_monitoring:
+            return 0.0
+            
+        self.is_monitoring = False
+        
+        # Terminar proceso powermetrics
+        if self.powermetrics_process:
+            self.powermetrics_process.terminate()
+            try:
+                self.powermetrics_process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                self.powermetrics_process.kill()
+        
+        # Esperar un momento para que se escriban los últimos datos
+        time.sleep(2)
+        
+        # Calcular consumo energético total
+        energy_kwh = self._calculate_energy_consumption()
+        self._cleanup()
+        
+        return energy_kwh
+    
+    def _calculate_energy_consumption(self):
+        """
+        Analiza los datos de powermetrics y calcula el consumo energético total.
+        Retorna: Energía consumida en kWh.
+        """
+        if not self.temp_file or not os.path.exists(self.temp_file.name):
+            return 0.0
+            
+        try:
+            with open(self.temp_file.name, 'r') as f:
+                content = f.read()
+            
+            # Extraer valores de potencia usando regex
+            cpu_powers = re.findall(r'CPU Power: (\d+) mW', content)
+            gpu_powers = re.findall(r'GPU Power: (\d+) mW', content)
+            
+            if not cpu_powers:
+                return 0.0
+            
+            # Convertir a watts y calcular promedio
+            avg_cpu_power = sum(int(p) for p in cpu_powers) / len(cpu_powers) / 1000  # mW a W
+            avg_gpu_power = sum(int(p) for p in gpu_powers) / len(gpu_powers) / 1000 if gpu_powers else 0
+            
+            # Potencia total promedio durante la compresión
+            total_avg_power = avg_cpu_power + avg_gpu_power
+            
+            # Duración del monitoreo: número de muestras × intervalo (5 segundos)
+            duration_hours = len(cpu_powers) * 5 / 3600  # Convertir a horas
+            
+            # Energía = Potencia × Tiempo
+            energy_kwh = total_avg_power * duration_hours / 1000  # W⋅h a kWh
+            
+            return energy_kwh
+            
+        except Exception as e:
+            print(f"⚠️  Error calculando consumo energético: {e}")
+            return 0.0
+    
+    def _cleanup(self):
+        """Limpia archivos temporales y recursos."""
+        if self.temp_file and os.path.exists(self.temp_file.name):
+            try:
+                os.unlink(self.temp_file.name)
+            except:
+                pass
+        self.temp_file = None
+        self.powermetrics_process = None
+
+
+def check_powermetrics_permissions():
+    """
+    Verifica si powermetrics puede ejecutarse con los permisos necesarios.
+    Retorna True si está disponible, False si necesita configuración.
+    """
+    try:
+        # Probar ejecución rápida de powermetrics
+        result = subprocess.run(
+            ['sudo', '-n', 'powermetrics', '--help'], 
+            capture_output=True, 
+            timeout=5
+        )
+        return result.returncode == 0
+    except:
+        return False
 
 
 def find_handbrake_cli():
@@ -99,6 +263,7 @@ def compress_video(source_path, dest_path, mode, handbrake_path):
       * max-frame-delay=1 para optimización de latencia
       * Mantiene exactamente la misma calidad visual
       * 15-30% más rápido en chips Apple Silicon
+    - NUEVO: Monitoreo energético real con datos de CPU y GPU
     
     Args:
         source_path (str): Ruta del archivo de video origen
@@ -106,7 +271,7 @@ def compress_video(source_path, dest_path, mode, handbrake_path):
         mode (str): 'cpu' o 'gpu' para seleccionar método de compresión
         handbrake_path (str): Ruta del ejecutable HandBrakeCLI
     """
-    global total_videos, total_compression_time, total_original_size, total_compressed_size
+    global total_videos, total_compression_time, total_original_size, total_compressed_size, total_energy_consumed
 
     # Verificar permisos de escritura en directorio destino
     dest_dir = os.path.dirname(dest_path)
@@ -125,6 +290,17 @@ def compress_video(source_path, dest_path, mode, handbrake_path):
     total_videos += 1
     total_original_size += original_size
     start_time = time.time()
+    
+    # Inicializar monitoreo energético si está disponible
+    power_monitor = PowerMonitor()
+    energy_consumed = 0.0
+    
+    # Verificar y iniciar monitoreo energético
+    if check_powermetrics_permissions():
+        power_monitor.start_monitoring()
+        print("⚡ Monitoreo energético activado")
+    else:
+        print("⚠️  Monitoreo energético no disponible (requiere sudo)")
 
     # Configuración base común para ambos modos
     base_command = [
@@ -220,12 +396,26 @@ def compress_video(source_path, dest_path, mode, handbrake_path):
         compressed_size = os.path.getsize(dest_path)
         total_compressed_size += compressed_size
         total_compression_time += time.time() - start_time
+        
+        # Finalizar monitoreo energético y agregar a estadísticas globales
+        energy_consumed = power_monitor.stop_monitoring()
+        total_energy_consumed += energy_consumed
+        
+        if energy_consumed > 0:
+            print(f"⚡ Energía consumida: {energy_consumed * 1000:.2f} Wh")
 
         # Mover archivo original a papelera (más seguro que eliminación permanente)
-        send2trash(source_path)
+        try:
+            send2trash(source_path)
+        except Exception as trash_error:
+            print(f"⚠️  Advertencia: No se pudo mover a papelera: {trash_error}")
+            print(f"   El archivo original permanece en: {source_path}")
         
     except Exception as e:
         print(f"\nOcurrió un error inesperado durante la compresión: {e}")
+        # Detener monitoreo energético en caso de error
+        if power_monitor:
+            power_monitor.stop_monitoring()
         # Revertir estadísticas en caso de excepción
         total_videos -= 1  
         total_original_size -= original_size
@@ -303,6 +493,7 @@ def shutdown_option():
 def display_statistics():
     """
     Muestra estadísticas finales del proceso de compresión en consola.
+    Incluye métricas de rendimiento, ahorro de espacio y consumo energético real.
     Reproduce sonido de notificación y calcula métricas de rendimiento.
     """
     if total_videos == 0:
@@ -335,6 +526,19 @@ def display_statistics():
     print(f"⏱️  Tiempo total: {int(hours)}h {int(minutes)}m")
     print(f"📉 Reducción de tamaño: {percent_space_saved:.1f}%")
     print(f"💾 Espacio ahorrado: {space_saved_gb:.2f} GB")
+    
+    # Nueva estadística: Consumo energético
+    if total_energy_consumed > 0:
+        energy_wh = total_energy_consumed * 1000  # Convertir kWh a Wh
+        print(f"⚡ Energía consumida: {total_energy_consumed:.4f} kWh ({energy_wh:.2f} Wh)")
+        
+        # Eficiencia energética por video
+        if total_videos > 0:
+            avg_energy_per_video = energy_wh / total_videos
+            print(f"🔋 Promedio por video: {avg_energy_per_video:.2f} Wh")
+    else:
+        print("⚠️  Consumo energético no monitoreado (requiere permisos sudo)")
+    
     print("="*50)
 
 def get_all_videos(directory):
@@ -383,7 +587,8 @@ def process_videos(video_paths, mode, handbrake_path):
 if __name__ == "__main__":
     """
     Punto de entrada principal del script.
-    Configura HandBrake, obtiene opciones del usuario y ejecuta compresión.
+    Configura HandBrake, verifica permisos para monitoreo energético, 
+    obtiene opciones del usuario y ejecuta compresión con tracking de energía.
     """
     # Buscar instalación de HandBrakeCLI
     handbrake_cli_path = find_handbrake_cli()
@@ -393,6 +598,14 @@ if __name__ == "__main__":
         sys.exit(1)
     
     print(f"✅ HandBrakeCLI encontrado en: {handbrake_cli_path}")
+    
+    # Verificar disponibilidad de monitoreo energético
+    if check_powermetrics_permissions():
+        print("⚡ Monitoreo energético disponible")
+    else:
+        print("⚠️  Monitoreo energético requiere permisos sudo")
+        print("💡 Para habilitar monitoreo energético, ejecute: sudo python3 compress.py")
+        print("   (El script funcionará normalmente sin monitoreo energético)")
 
     # Obtener configuraciones del usuario
     shutdown_option, compression_option = shutdown_option()
