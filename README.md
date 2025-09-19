@@ -114,7 +114,7 @@ Resolución: Preservada (máx. 1080p)
 ### � **Estadísticas Detalladas de Compresión**
 
 <p align="center">
-  <img src="https://github.com/CodeGeekR/compress-mp4-hardware-acceleration/blob/main/images/stadists_release_mac.png?raw=true" alt="Estadísticas de Compresión en Consola" width="700">
+  <img src="https://github.com/CodeGeekR/compress_mp4/blob/main/images/stadists_release_mac.png?raw=true" alt="Estadísticas de Compresión en Consola" width="700">
 </p>
 
 ### 🗑️ **Gestión Automática de Archivos**
